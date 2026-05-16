@@ -284,6 +284,17 @@ export default function RefView({ onOpenRules }) {
   const [error, setError] = useState(false)
   const [selectedSport, setSelectedSport] = useState('')
 
+  // ── Admin tools ─────────────────────────────────────────────────────────────
+  const [adminOpen,    setAdminOpen]    = useState(false)
+  const [debugTime,    setDebugTime]    = useState(() => localStorage.getItem('fd_debug_time') || '')
+  const [debugActive,  setDebugActive]  = useState(() => !!localStorage.getItem('fd_debug_time'))
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [clearing,     setClearing]     = useState(false)
+  const [clearDone,    setClearDone]    = useState(false)
+  const [dbConfirm,    setDbConfirm]    = useState(false)
+  const [dbClearing,   setDbClearing]   = useState(false)
+  const [dbClearDone,  setDbClearDone]  = useState(false)
+
   function login(e) {
     e.preventDefault()
     if (pw === REF_PASSWORD) { setAuthed(true); setError(false) }
@@ -328,17 +339,6 @@ export default function RefView({ onOpenRules }) {
   }
 
   const sport = SPORTS.find(s => s.id === Number(selectedSport))
-
-  // ── Admin tools ─────────────────────────────────────────────────────────────
-  const [adminOpen,    setAdminOpen]    = useState(false)
-  const [debugTime,    setDebugTime]    = useState(() => localStorage.getItem('fd_debug_time') || '')
-  const [debugActive,  setDebugActive]  = useState(() => !!localStorage.getItem('fd_debug_time'))
-  const [clearConfirm, setClearConfirm] = useState(false)
-  const [clearing,     setClearing]     = useState(false)
-  const [clearDone,    setClearDone]    = useState(false)
-  const [dbConfirm,    setDbConfirm]    = useState(false)
-  const [dbClearing,   setDbClearing]   = useState(false)
-  const [dbClearDone,  setDbClearDone]  = useState(false)
 
   function applyDebugTime() {
     if (debugTime) {
