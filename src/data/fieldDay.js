@@ -135,7 +135,8 @@ export const ROTATION_STARTS = [
   [8, 15], [8, 43], [9, 11], [9, 39], [10, 7], [10, 35], [11, 3], [11, 31],
 ]
 
-export const REF_PASSWORD = import.meta.env.VITE_REF_PASSWORD ?? 'password'
+export const REF_PASSWORD   = import.meta.env.VITE_REF_PASSWORD   ?? 'password'
+export const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD ?? 'admin123'
 
 // Helper: get team name by id
 export function teamName(id) {

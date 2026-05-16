@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore'
+import { db } from '../lib/firebase'
 import FieldMap from '../components/FieldMap'
-import { TEAMS, ROTATIONS, POST_ROTATIONS, ROTATION_STARTS, SPORTS, teamName } from '../data/fieldDay'
+import { TEAMS, ROTATIONS, POST_ROTATIONS, ROTATION_STARTS, SPORTS, teamName, ADMIN_PASSWORD } from '../data/fieldDay'
 
 const STORAGE_KEY = 'fieldday_team'
 
@@ -54,6 +56,65 @@ export default function TeamsView() {
   const [debugMins, setDebugMins] = useState(null)
   const [debugError, setDebugError] = useState('')
   const inputRef = useRef(null)
+
+  // ── Admin portal ────────────────────────────────────────────────────────────
+  const [adminOpen,    setAdminOpen]    = useState(false)
+  const [adminAuthed,  setAdminAuthed]  = useState(false)
+  const [adminPw,      setAdminPw]      = useState('')
+  const [adminPwError, setAdminPwError] = useState(false)
+  const [adminTimeIn,  setAdminTimeIn]  = useState('')
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [clearing,     setClearing]     = useState(false)
+  const [clearDone,    setClearDone]    = useState(false)
+  const [dbConfirm,    setDbConfirm]    = useState(false)
+  const [dbClearing,   setDbClearing]   = useState(false)
+  const [dbClearDone,  setDbClearDone]  = useState(false)
+
+  function openAdmin() {
+    setAdminOpen(true); setAdminAuthed(false)
+    setAdminPw(''); setAdminPwError(false)
+    setClearConfirm(false); setClearDone(false)
+    setDbConfirm(false); setDbClearDone(false)
+  }
+  function closeAdmin() { setAdminOpen(false) }
+
+  function submitAdminPw(e) {
+    e.preventDefault()
+    if (adminPw === ADMIN_PASSWORD) { setAdminAuthed(true); setAdminPwError(false) }
+    else { setAdminPwError(true); setAdminPw('') }
+  }
+
+  function applyAdminTime() {
+    if (!adminTimeIn) return
+    const [h, m] = adminTimeIn.split(':').map(Number)
+    setDebugMins(h * 60 + m)
+  }
+
+  async function clearLeaderboard() {
+    setClearing(true); setClearDone(false)
+    try {
+      const snap = await getDocs(collection(db, 'scores'))
+      await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'scores', d.id))))
+      const keys = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && (k.startsWith('fd_score') || k.startsWith('fd_snap'))) keys.push(k)
+      }
+      keys.forEach(k => localStorage.removeItem(k))
+      setClearConfirm(false); setClearDone(true)
+    } finally { setClearing(false) }
+  }
+
+  async function clearDatabase() {
+    setDbClearing(true); setDbClearDone(false)
+    try {
+      const snap = await getDocs(collection(db, 'scores'))
+      await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'scores', d.id))))
+      localStorage.clear()
+      setDebugMins(null); setAdminTimeIn('')
+      setDbConfirm(false); setDbClearDone(true)
+    } finally { setDbClearing(false) }
+  }
 
   useEffect(() => {
     if (!import.meta.env.DEV) return  // debug shortcut only in development
@@ -160,6 +221,143 @@ export default function TeamsView() {
               <p className="text-xs text-center font-mono" style={{ color: 'rgba(255,200,100,0.6)' }}>
                 Active override: {String(Math.floor(debugMins/60)).padStart(2,'0')}:{String(debugMins%60).padStart(2,'0')}
               </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Admin portal */}
+      {adminOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(12px)' }}
+          onClick={e => { if (e.target === e.currentTarget) closeAdmin() }}>
+          <div className="glass-strong rounded-2xl w-full max-w-sm overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <p className="text-sm font-bold text-white">Admin Tools</p>
+              <button onClick={closeAdmin} className="text-white/30 text-xs hover:text-white/60 active:scale-90">✕</button>
+            </div>
+
+            {!adminAuthed ? (
+              <div className="p-5 space-y-3">
+                <form onSubmit={submitAdminPw} className="space-y-3">
+                  <input
+                    type="password"
+                    value={adminPw}
+                    autoFocus
+                    onChange={e => { setAdminPw(e.target.value); setAdminPwError(false) }}
+                    placeholder="Admin password"
+                    className="w-full rounded-xl px-4 py-3 text-center text-sm font-semibold focus:outline-none tracking-widest text-white placeholder:text-white/25"
+                    style={adminPwError
+                      ? { background: 'rgba(185,28,28,0.25)', border: '1px solid rgba(248,113,113,0.5)' }
+                      : { background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+                  />
+                  {adminPwError && (
+                    <p className="text-xs text-center font-medium" style={{ color: '#f87171' }}>Incorrect password</p>
+                  )}
+                  <button type="submit"
+                    className="w-full py-3 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                    style={{ background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)', boxShadow: '0 4px 16px rgba(185,28,28,0.3)' }}>
+                    Unlock →
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+
+                {/* Debug Time */}
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,150,150,0.6)' }}>Debug Time</p>
+                  <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>Override the clock to test round detection on this device.</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="time"
+                      value={adminTimeIn}
+                      onChange={e => setAdminTimeIn(e.target.value)}
+                      className="flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-white focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    />
+                    <button onClick={applyAdminTime}
+                      className="px-4 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                      style={{ background: 'linear-gradient(135deg, #1d4ed8, #3b82f6)' }}>
+                      Set
+                    </button>
+                    <button onClick={() => { setDebugMins(null); setAdminTimeIn('') }}
+                      className="px-4 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      Clear
+                    </button>
+                  </div>
+                  {debugMins !== null && (
+                    <p className="text-xs mt-2 font-semibold" style={{ color: '#fbbf24' }}>
+                      Active: {String(Math.floor(debugMins / 60)).padStart(2, '0')}:{String(debugMins % 60).padStart(2, '0')}
+                    </p>
+                  )}
+                </div>
+
+                {/* Clear Leaderboard */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1.25rem' }}>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,150,150,0.6)' }}>Clear Leaderboard</p>
+                  <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>Deletes all Firestore scores and cached score data.</p>
+                  {clearDone && <p className="text-xs font-bold mb-2" style={{ color: '#4ade80' }}>Scores cleared.</p>}
+                  {!clearConfirm ? (
+                    <button onClick={() => { setClearConfirm(true); setClearDone(false) }}
+                      className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                      style={{ background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)', boxShadow: '0 4px 12px rgba(185,28,28,0.3)' }}>
+                      Clear All Scores…
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-center font-semibold" style={{ color: '#f87171' }}>Cannot be undone. Confirm?</p>
+                      <div className="flex gap-2">
+                        <button onClick={clearLeaderboard} disabled={clearing}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)' }}>
+                          {clearing ? 'Clearing…' : 'Yes, Clear'}
+                        </button>
+                        <button onClick={() => setClearConfirm(false)}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95"
+                          style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Clear Database */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1.25rem' }}>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,150,150,0.6)' }}>Clear Database</p>
+                  <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>Full reset — wipes all Firestore data and all localStorage.</p>
+                  {dbClearDone && <p className="text-xs font-bold mb-2" style={{ color: '#4ade80' }}>Database cleared.</p>}
+                  {!dbConfirm ? (
+                    <button onClick={() => { setDbConfirm(true); setDbClearDone(false) }}
+                      className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                      style={{ background: 'linear-gradient(135deg, #450a0a, #7f1d1d)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                      Clear Database…
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-center font-semibold" style={{ color: '#f87171' }}>Wipes ALL data. Are you sure?</p>
+                      <div className="flex gap-2">
+                        <button onClick={clearDatabase} disabled={dbClearing}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg, #450a0a, #7f1d1d)' }}>
+                          {dbClearing ? 'Clearing…' : 'Yes, Wipe All'}
+                        </button>
+                        <button onClick={() => setDbConfirm(false)}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95"
+                          style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
             )}
           </div>
         </div>
@@ -333,6 +531,18 @@ export default function TeamsView() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Admin trigger */}
+      <div className="flex justify-center pb-2">
+        <button
+          onClick={openAdmin}
+          aria-label="Admin tools"
+          className="w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-transform text-sm"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.18)' }}
+        >
+          ⚙
+        </button>
       </div>
 
     </div>
