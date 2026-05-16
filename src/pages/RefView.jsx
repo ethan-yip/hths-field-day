@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { doc, setDoc, onSnapshot } from 'firebase/firestore'
+import { doc, setDoc, onSnapshot, collection, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { saveScoreLocal, loadAllScoresLocal, saveSnapshot } from '../lib/scoreStorage'
 import FieldMap from '../components/FieldMap'
@@ -30,7 +30,6 @@ function ScoreLogger({ sportId }) {
 
   // Per-round cloud status: 'synced' | 'saving' | 'queued' | 'error'
   const [cloudStatus, setCloudStatus] = useState({})
-  const [loading,     setLoading]     = useState(true)
 
   const saveCountRef = useRef(0)  // counts saves since mount for snapshot trigger
   const online = useOnline()
@@ -39,34 +38,27 @@ function ScoreLogger({ sportId }) {
   // ── Subscribe to Firestore; merge with local on arrival ──────────────────
   useEffect(() => {
     setScores(loadAllScoresLocal(sportId, roundNums))
-    setLoading(true)
     setCloudStatus({})
-    let resolved = 0
 
-    const unsubs = ROTATIONS.map(r => {
-      const ref = doc(db, 'scores', `${sportId}_${r.round}`)
-      return onSnapshot(ref, snap => {
-        if (snap.exists()) {
-          const d = snap.data()
-          const cloudTs = d.updatedAt ? new Date(d.updatedAt).getTime() : 0
-          setScores(prev => {
-            const localTs = prev[r.round]?._ts ?? 0
-            // Only overwrite if Firestore is newer than what we last saved locally
-            if (cloudTs >= localTs) {
-              return {
-                ...prev,
-                [r.round]: { wins1: d.wins1 ?? '', wins2: d.wins2 ?? '', _ts: cloudTs },
-              }
-            }
-            return prev
-          })
-          setCloudStatus(prev => ({ ...prev, [r.round]: 'synced' }))
-        }
-        resolved++
-        if (resolved >= ROTATIONS.length) setLoading(false)
+    // One collection query instead of N individual doc listeners
+    const q = query(collection(db, 'scores'), where('sportId', '==', sportId))
+    const unsub = onSnapshot(q, snap => {
+      snap.docs.forEach(d => {
+        const data = d.data()
+        const round = data.round
+        if (round == null) return
+        const cloudTs = data.updatedAt ? new Date(data.updatedAt).getTime() : 0
+        setScores(prev => {
+          const localTs = prev[round]?._ts ?? 0
+          if (cloudTs >= localTs) {
+            return { ...prev, [round]: { wins1: data.wins1 ?? '', wins2: data.wins2 ?? '', _ts: cloudTs } }
+          }
+          return prev
+        })
+        setCloudStatus(prev => ({ ...prev, [round]: 'synced' }))
       })
     })
-    return () => unsubs.forEach(u => u())
+    return unsub
   }, [sportId])
 
   // ── Local update (instant) ────────────────────────────────────────────────
@@ -123,14 +115,6 @@ function ScoreLogger({ sportId }) {
   const syncedCount = Object.values(cloudStatus).filter(s => s === 'synced').length
   const queuedCount = Object.values(cloudStatus).filter(s => s === 'queued').length
   const errorCount  = Object.values(cloudStatus).filter(s => s === 'error').length
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <div className="w-5 h-5 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-2">
