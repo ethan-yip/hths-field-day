@@ -336,6 +336,9 @@ export default function RefView({ onOpenRules }) {
   const [clearConfirm, setClearConfirm] = useState(false)
   const [clearing,     setClearing]     = useState(false)
   const [clearDone,    setClearDone]    = useState(false)
+  const [dbConfirm,    setDbConfirm]    = useState(false)
+  const [dbClearing,   setDbClearing]   = useState(false)
+  const [dbClearDone,  setDbClearDone]  = useState(false)
 
   function applyDebugTime() {
     if (debugTime) {
@@ -351,6 +354,22 @@ export default function RefView({ onOpenRules }) {
     setDebugTime('')
     localStorage.removeItem('fd_debug_time')
     setDebugActive(false)
+  }
+
+  async function clearDatabase() {
+    setDbClearing(true)
+    setDbClearDone(false)
+    try {
+      const snap = await getDocs(collection(db, 'scores'))
+      await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'scores', d.id))))
+      localStorage.clear()
+      setDebugTime('')
+      setDebugActive(false)
+      setDbConfirm(false)
+      setDbClearDone(true)
+    } finally {
+      setDbClearing(false)
+    }
   }
 
   async function clearLeaderboard() {
@@ -532,6 +551,51 @@ export default function RefView({ onOpenRules }) {
                     </button>
                     <button
                       onClick={() => setClearConfirm(false)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Clear Database */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1rem' }}>
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,150,150,0.6)' }}>
+                Clear Database
+              </p>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                Full hard reset — deletes all Firestore scores AND clears all localStorage (including debug overrides). Cannot be undone.
+              </p>
+              {dbClearDone && (
+                <p className="text-xs font-bold mb-2" style={{ color: '#4ade80' }}>Database cleared successfully.</p>
+              )}
+              {!dbConfirm ? (
+                <button
+                  onClick={() => { setDbConfirm(true); setDbClearDone(false) }}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                  style={{ background: 'linear-gradient(135deg, #450a0a, #7f1d1d)', border: '1px solid rgba(248,113,113,0.25)', boxShadow: '0 4px 12px rgba(127,29,29,0.4)' }}
+                >
+                  Clear Database…
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-center" style={{ color: '#f87171' }}>
+                    Wipes ALL Firestore data + localStorage. Are you sure?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={clearDatabase}
+                      disabled={dbClearing}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform disabled:opacity-50"
+                      style={{ background: 'linear-gradient(135deg, #450a0a, #7f1d1d)' }}
+                    >
+                      {dbClearing ? 'Clearing…' : 'Yes, Wipe All'}
+                    </button>
+                    <button
+                      onClick={() => setDbConfirm(false)}
                       className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
                       style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}
                     >
