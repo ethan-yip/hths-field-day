@@ -42,22 +42,29 @@ function ScoreLogger({ sportId }) {
 
     // One collection query instead of N individual doc listeners
     const q = query(collection(db, 'scores'), where('sportId', '==', sportId))
-    const unsub = onSnapshot(q, snap => {
-      snap.docs.forEach(d => {
-        const data = d.data()
-        const round = data.round
-        if (round == null) return
-        const cloudTs = data.updatedAt ? new Date(data.updatedAt).getTime() : 0
-        setScores(prev => {
-          const localTs = prev[round]?._ts ?? 0
-          if (cloudTs >= localTs) {
-            return { ...prev, [round]: { wins1: data.wins1 ?? '', wins2: data.wins2 ?? '', _ts: cloudTs } }
-          }
-          return prev
+    const unsub = onSnapshot(
+      q,
+      snap => {
+        snap.docs.forEach(d => {
+          const data = d.data()
+          const round = data.round
+          if (round == null) return
+          const cloudTs = data.updatedAt ? new Date(data.updatedAt).getTime() : 0
+          setScores(prev => {
+            const localTs = prev[round]?._ts ?? 0
+            if (cloudTs >= localTs) {
+              return { ...prev, [round]: { wins1: data.wins1 ?? '', wins2: data.wins2 ?? '', _ts: cloudTs } }
+            }
+            return prev
+          })
+          setCloudStatus(prev => ({ ...prev, [round]: 'synced' }))
         })
-        setCloudStatus(prev => ({ ...prev, [round]: 'synced' }))
-      })
-    })
+      },
+      err => {
+        console.warn('[ScoreLogger] Firestore listener error:', err.code)
+        // Leave scores as-is from localStorage; don't crash the component
+      }
+    )
     return unsub
   }, [sportId])
 
@@ -66,49 +73,42 @@ function ScoreLogger({ sportId }) {
     setScores(prev => ({ ...prev, [round]: { ...prev[round], [field]: val } }))
   }
 
-  // ── Save on blur: local first, then Firestore ─────────────────────────────
-  async function saveRound(round) {
+  // ── Save on blur: local first, then Firestore fire-and-forget ───────────────
+  function saveRound(round) {
     const s = scores[round]
     if (s.wins1 === '' && s.wins2 === '') return
 
-    // Validate: must be finite numbers in a sane range
     const w1 = parseFloat(s.wins1)
     const w2 = parseFloat(s.wins2)
     if (!Number.isFinite(w1) || !Number.isFinite(w2)) return
     if (w1 < 0 || w2 < 0 || w1 > 500 || w2 > 500) return
-    // Only allow whole numbers or .5 increments (for ties)
     if ((w1 * 2) % 1 !== 0 || (w2 * 2) % 1 !== 0) return
 
-    // Layer 2: localStorage — instant, always succeeds
+    // localStorage — instant
     saveScoreLocal(sportId, round, s.wins1, s.wins2)
     setScores(prev => ({ ...prev, [round]: { ...prev[round], _ts: Date.now() } }))
 
-    // Layer 3: snapshot every N saves
     saveCountRef.current += 1
     if (saveCountRef.current % SNAPSHOT_EVERY === 0) {
       saveSnapshot(sportId, scores)
       lastSnapRef.current = new Date().toLocaleTimeString()
     }
 
-    // Layer 1: Firestore (queued offline, auto-syncs on reconnect)
+    // Firestore — fire and forget; onSnapshot flips status to 'synced' on confirm
     setCloudStatus(prev => ({ ...prev, [round]: online ? 'saving' : 'queued' }))
-    try {
-      const rotation = ROTATIONS.find(r => r.round === round)
-      const [t1, t2] = rotation?.matchups[sportId] ?? []
-      const total = (parseFloat(s.wins1) || 0) + (parseFloat(s.wins2) || 0)
-      await setDoc(
-        doc(db, 'scores', `${sportId}_${round}`),
-        { sportId, round, team1: t1 ?? null, team2: t2 ?? null,
-          wins1: s.wins1, wins2: s.wins2, total,
-          updatedAt: new Date().toISOString() },
-        { merge: true }
-      )
-      setCloudStatus(prev => ({ ...prev, [round]: 'synced' }))
-    } catch (err) {
-      // Firebase offline: write is queued in IndexedDB, will retry automatically
+    const rotation = ROTATIONS.find(r => r.round === round)
+    const [t1, t2] = rotation?.matchups[sportId] ?? []
+    const total = w1 + w2
+    setDoc(
+      doc(db, 'scores', `${sportId}_${round}`),
+      { sportId, round, team1: t1 ?? null, team2: t2 ?? null,
+        wins1: s.wins1, wins2: s.wins2, total,
+        updatedAt: new Date().toISOString() },
+      { merge: true }
+    ).catch(err => {
       setCloudStatus(prev => ({ ...prev, [round]: online ? 'error' : 'queued' }))
-      console.warn('[ScoreLogger] Firestore save deferred:', err.code)
-    }
+      console.warn('[ScoreLogger] Firestore save failed:', err.code)
+    })
   }
 
   // ── Status bar ────────────────────────────────────────────────────────────
