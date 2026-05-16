@@ -3,7 +3,12 @@ import FieldMap from '../components/FieldMap'
 import { TEAMS, ROTATIONS, POST_ROTATIONS, ROTATION_STARTS, SPORTS, teamName } from '../data/fieldDay'
 
 function getCurrentRound() {
+  const override = localStorage.getItem('fd_debug_time')
   const now = new Date()
+  if (override) {
+    const [h, m] = override.split(':').map(Number)
+    now.setHours(h, m, 0, 0)
+  }
   const nowMins = now.getHours() * 60 + now.getMinutes()
   let current = null
   for (let i = 0; i < ROTATION_STARTS.length; i++) {

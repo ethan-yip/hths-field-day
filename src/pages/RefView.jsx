@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { doc, setDoc, onSnapshot } from 'firebase/firestore'
+import { doc, setDoc, onSnapshot, collection, getDocs, deleteDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { saveScoreLocal, loadAllScoresLocal, saveSnapshot } from '../lib/scoreStorage'
 import FieldMap from '../components/FieldMap'
@@ -329,6 +329,49 @@ export default function RefView({ onOpenRules }) {
 
   const sport = SPORTS.find(s => s.id === Number(selectedSport))
 
+  // ── Admin tools ─────────────────────────────────────────────────────────────
+  const [adminOpen,    setAdminOpen]    = useState(false)
+  const [debugTime,    setDebugTime]    = useState(() => localStorage.getItem('fd_debug_time') || '')
+  const [debugActive,  setDebugActive]  = useState(() => !!localStorage.getItem('fd_debug_time'))
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [clearing,     setClearing]     = useState(false)
+  const [clearDone,    setClearDone]    = useState(false)
+
+  function applyDebugTime() {
+    if (debugTime) {
+      localStorage.setItem('fd_debug_time', debugTime)
+      setDebugActive(true)
+    } else {
+      localStorage.removeItem('fd_debug_time')
+      setDebugActive(false)
+    }
+  }
+
+  function clearDebugTime() {
+    setDebugTime('')
+    localStorage.removeItem('fd_debug_time')
+    setDebugActive(false)
+  }
+
+  async function clearLeaderboard() {
+    setClearing(true)
+    setClearDone(false)
+    try {
+      const snap = await getDocs(collection(db, 'scores'))
+      await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'scores', d.id))))
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('fd_score') || key && key.startsWith('fd_snap')) {
+          localStorage.removeItem(key)
+        }
+      }
+      setClearConfirm(false)
+      setClearDone(true)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="p-4 space-y-4 max-w-lg mx-auto">
 
@@ -394,6 +437,114 @@ export default function RefView({ onOpenRules }) {
           </p>
         </div>
       )}
+
+      {/* Admin Tools */}
+      <div className="glass rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setAdminOpen(o => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 active:bg-white/5"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚙️</span>
+            <span className="text-sm font-bold" style={{ color: 'rgba(255,255,255,0.55)' }}>Admin Tools</span>
+            {debugActive && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>
+                Time override ON
+              </span>
+            )}
+          </div>
+          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>{adminOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {adminOpen && (
+          <div className="px-4 pb-4 space-y-5" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+
+            {/* Debug Time */}
+            <div className="pt-3">
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,150,150,0.6)' }}>
+                Debug Time
+              </p>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                Override the clock used to highlight the current round. Only affects this device.
+              </p>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="time"
+                  value={debugTime}
+                  onChange={e => setDebugTime(e.target.value)}
+                  className="flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-white focus:outline-none"
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+                />
+                <button
+                  onClick={applyDebugTime}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                  style={{ background: 'linear-gradient(135deg, #1d4ed8, #3b82f6)', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+                >
+                  Set
+                </button>
+                <button
+                  onClick={clearDebugTime}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  Clear
+                </button>
+              </div>
+              {debugActive && (
+                <p className="text-xs mt-2 font-semibold" style={{ color: '#fbbf24' }}>
+                  ⚠ Time override active: {localStorage.getItem('fd_debug_time')} — rounds highlight accordingly
+                </p>
+              )}
+            </div>
+
+            {/* Clear Leaderboard */}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1rem' }}>
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,150,150,0.6)' }}>
+                Clear Leaderboard
+              </p>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                Permanently deletes all scores from Firestore and localStorage on every device.
+              </p>
+              {clearDone && (
+                <p className="text-xs font-bold mb-2" style={{ color: '#4ade80' }}>All scores cleared successfully.</p>
+              )}
+              {!clearConfirm ? (
+                <button
+                  onClick={() => { setClearConfirm(true); setClearDone(false) }}
+                  className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                  style={{ background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)', boxShadow: '0 4px 12px rgba(185,28,28,0.3)' }}
+                >
+                  Clear All Scores…
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-center" style={{ color: '#f87171' }}>
+                    This cannot be undone. Delete all scores?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={clearLeaderboard}
+                      disabled={clearing}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform disabled:opacity-50"
+                      style={{ background: 'linear-gradient(135deg, #7f1d1d, #b91c1c)' }}
+                    >
+                      {clearing ? 'Clearing…' : 'Yes, Clear All'}
+                    </button>
+                    <button
+                      onClick={() => setClearConfirm(false)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+      </div>
 
       <FieldMap />
     </div>
