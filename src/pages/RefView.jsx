@@ -276,7 +276,7 @@ function ScoreLogger({ sportId }) {
 export default function RefView({ onOpenRules, refAuthed, onLogin }) {
   const [pw,    setPw]    = useState('')
   const [error, setError] = useState(false)
-  const [selectedSport, setSelectedSport] = useState('')
+  const [selectedSport, setSelectedSport] = useState(() => localStorage.getItem('fd_ref_sport') ?? '')
 
   function login(e) {
     e.preventDefault()
@@ -331,7 +331,7 @@ export default function RefView({ onOpenRules, refAuthed, onLogin }) {
           style={{ color: 'rgba(255,150,150,0.7)' }}>Your Sport</label>
         <select
           value={selectedSport}
-          onChange={e => setSelectedSport(e.target.value)}
+          onChange={e => { setSelectedSport(e.target.value); localStorage.setItem('fd_ref_sport', e.target.value) }}
           className="w-full rounded-xl px-3 py-3 text-sm focus:outline-none font-medium text-white"
           style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
         >
