@@ -29,9 +29,10 @@ function ScoreLogger({ sportId }) {
   const [open,   setOpen]   = useState(null)
 
   // Per-round cloud status: 'synced' | 'saving' | 'queued' | 'error'
-  const [cloudStatus, setCloudStatus] = useState({})
+  const [cloudStatus,    setCloudStatus]    = useState({})
+  const [firestoreError, setFirestoreError] = useState(null)
 
-  const saveCountRef = useRef(0)  // counts saves since mount for snapshot trigger
+  const saveCountRef = useRef(0)
   const online = useOnline()
   const lastSnapRef = useRef(null)
 
@@ -39,12 +40,13 @@ function ScoreLogger({ sportId }) {
   useEffect(() => {
     setScores(loadAllScoresLocal(sportId, roundNums))
     setCloudStatus({})
+    setFirestoreError(null)
 
-    // One collection query instead of N individual doc listeners
     const q = query(collection(db, 'scores'), where('sportId', '==', sportId))
     const unsub = onSnapshot(
       q,
       snap => {
+        setFirestoreError(null)
         snap.docs.forEach(d => {
           const data = d.data()
           const round = data.round
@@ -61,8 +63,7 @@ function ScoreLogger({ sportId }) {
         })
       },
       err => {
-        console.warn('[ScoreLogger] Firestore listener error:', err.code)
-        // Leave scores as-is from localStorage; don't crash the component
+        setFirestoreError(err.code)
       }
     )
     return unsub
@@ -107,7 +108,7 @@ function ScoreLogger({ sportId }) {
       { merge: true }
     ).catch(err => {
       setCloudStatus(prev => ({ ...prev, [round]: online ? 'error' : 'queued' }))
-      console.warn('[ScoreLogger] Firestore save failed:', err.code)
+      setFirestoreError(err.code)
     })
   }
 
@@ -120,33 +121,45 @@ function ScoreLogger({ sportId }) {
     <div className="space-y-2">
 
       {/* Status bar */}
-      <div className="flex items-center justify-between px-3 py-2 rounded-xl"
-        style={{
-          background: online ? 'rgba(21,128,61,0.12)' : 'rgba(180,83,9,0.18)',
-          border: `1px solid ${online ? 'rgba(74,222,128,0.2)' : 'rgba(251,146,60,0.3)'}`,
-        }}>
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full shrink-0"
-            style={{ background: online ? '#4ade80' : '#fb923c' }} />
-          <span className="text-xs font-semibold"
-            style={{ color: online ? '#4ade80' : '#fb923c' }}>
-            {online ? 'Online' : 'Offline — scores saved locally, will sync on reconnect'}
-          </span>
+      {firestoreError ? (
+        <div className="px-3 py-2 rounded-xl"
+          style={{ background: 'rgba(185,28,28,0.25)', border: '1px solid rgba(248,113,113,0.4)' }}>
+          <p className="text-xs font-bold" style={{ color: '#f87171' }}>
+            Firestore error: {firestoreError}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,180,180,0.6)' }}>
+            Scores saved locally. Check database rules in Firebase console.
+          </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {queuedCount > 0 && (
-            <span className="text-xs" style={{ color: '#fb923c' }}>{queuedCount} queued</span>
-          )}
-          {errorCount > 0 && (
-            <span className="text-xs" style={{ color: '#f87171' }}>{errorCount} error</span>
-          )}
-          {lastSnapRef.current && (
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              snap {lastSnapRef.current}
+      ) : (
+        <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+          style={{
+            background: online ? 'rgba(21,128,61,0.12)' : 'rgba(180,83,9,0.18)',
+            border: `1px solid ${online ? 'rgba(74,222,128,0.2)' : 'rgba(251,146,60,0.3)'}`,
+          }}>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: online ? '#4ade80' : '#fb923c' }} />
+            <span className="text-xs font-semibold"
+              style={{ color: online ? '#4ade80' : '#fb923c' }}>
+              {online ? 'Online' : 'Offline — scores saved locally, will sync on reconnect'}
             </span>
-          )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {queuedCount > 0 && (
+              <span className="text-xs" style={{ color: '#fb923c' }}>{queuedCount} queued</span>
+            )}
+            {errorCount > 0 && (
+              <span className="text-xs" style={{ color: '#f87171' }}>{errorCount} error</span>
+            )}
+            {lastSnapRef.current && (
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                snap {lastSnapRef.current}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Round rows */}
       {ROTATIONS.map(r => {
