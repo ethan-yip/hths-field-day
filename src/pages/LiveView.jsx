@@ -141,12 +141,19 @@ export default function LiveView() {
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'scores'), snap => {
-      const docs = {}
-      snap.forEach(d => { docs[d.id] = d.data() })
-      setScoreDocs(docs)
-      setLoading(false)
-    })
+    const unsub = onSnapshot(
+      collection(db, 'scores'),
+      snap => {
+        const docs = {}
+        snap.forEach(d => { docs[d.id] = d.data() })
+        setScoreDocs(docs)
+        setLoading(false)
+      },
+      err => {
+        console.error('[LiveView] Firestore error:', err.code)
+        setLoading(false)
+      }
+    )
     return unsub
   }, [])
 
