@@ -149,20 +149,27 @@ export default function TeamsView() {
   }, [debugOpen])
 
   useEffect(() => {
-    const round = getCurrentRound(debugMins !== null ? debugMins : getEasternMins())
-    if (!round) { setSecsLeft(null); return }
-    const endMins = round < ROTATION_STARTS.length
-      ? ROTATION_STARTS[round][0] * 60 + ROTATION_STARTS[round][1]
-      : ROTATION_STARTS[round - 1][0] * 60 + ROTATION_STARTS[round - 1][1] + 28
+    function computeTimer() {
+      const round = getCurrentRound(debugMins !== null ? debugMins : getEasternMins())
+      if (!round) { setSecsLeft(null); return null }
+      const endMins = round < ROTATION_STARTS.length
+        ? ROTATION_STARTS[round][0] * 60 + ROTATION_STARTS[round][1]
+        : ROTATION_STARTS[round - 1][0] * 60 + ROTATION_STARTS[round - 1][1] + 28
+      return { endMins }
+    }
     if (debugMins !== null) {
-      setSecsLeft(Math.max(0, (endMins - debugMins) * 60))
+      const r = computeTimer()
+      if (r) setSecsLeft(Math.max(0, (r.endMins - debugMins) * 60))
       return
     }
-    function tick() { setSecsLeft(Math.max(0, endMins * 60 - getEasternSecs())) }
+    function tick() {
+      const r = computeTimer()
+      if (r) setSecsLeft(Math.max(0, r.endMins * 60 - getEasternSecs()))
+    }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [currentRound, debugMins])
+  }, [debugMins])
 
   function submitDebug(e) {
     e.preventDefault()
