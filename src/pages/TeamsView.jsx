@@ -11,6 +11,18 @@ function getEasternMins() {
   return eastern.getHours() * 60 + eastern.getMinutes()
 }
 
+function getEasternSecs() {
+  const eastern = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
+  return eastern.getHours() * 3600 + eastern.getMinutes() * 60 + eastern.getSeconds()
+}
+
+function fmtTimer(secs) {
+  if (secs == null || secs <= 0) return '0:00'
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 function getCurrentRound(nowMins) {
   for (let i = 0; i < ROTATION_STARTS.length; i++) {
     const [h, m] = ROTATION_STARTS[i]
@@ -69,6 +81,7 @@ export default function TeamsView() {
   const [dbConfirm,    setDbConfirm]    = useState(false)
   const [dbClearing,   setDbClearing]   = useState(false)
   const [dbClearDone,  setDbClearDone]  = useState(false)
+  const [secsLeft,     setSecsLeft]     = useState(null)
 
   function openAdmin() {
     setAdminOpen(true); setAdminAuthed(false)
@@ -135,6 +148,22 @@ export default function TeamsView() {
     if (debugOpen) setTimeout(() => inputRef.current?.focus(), 50)
   }, [debugOpen])
 
+  useEffect(() => {
+    const round = getCurrentRound(debugMins !== null ? debugMins : getEasternMins())
+    if (!round) { setSecsLeft(null); return }
+    const endMins = round < ROTATION_STARTS.length
+      ? ROTATION_STARTS[round][0] * 60 + ROTATION_STARTS[round][1]
+      : ROTATION_STARTS[round - 1][0] * 60 + ROTATION_STARTS[round - 1][1] + 28
+    if (debugMins !== null) {
+      setSecsLeft(Math.max(0, (endMins - debugMins) * 60))
+      return
+    }
+    function tick() { setSecsLeft(Math.max(0, endMins * 60 - getEasternSecs())) }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [currentRound, debugMins])
+
   function submitDebug(e) {
     e.preventDefault()
     const trimmed = debugInput.trim()
@@ -173,6 +202,25 @@ export default function TeamsView() {
           opponent: r.matchups[sportId].find(id => id !== team.id),
           time: r.time,
         }
+      })()
+    : null
+
+  const nextGame = team && currentRound
+    ? (() => {
+        if (currentRound < ROTATIONS.length) {
+          const r = ROTATIONS[currentRound]
+          const sportId = Object.keys(r.matchups).find(sid => r.matchups[sid].includes(team.id))
+          if (!sportId) return null
+          return {
+            round: r.round, time: r.time,
+            sport: SPORTS.find(s => s.id === Number(sportId)),
+            opponent: r.matchups[sportId].find(id => id !== team.id),
+            isPost: false,
+          }
+        }
+        return POST_ROTATIONS.length > 0
+          ? { label: POST_ROTATIONS[0].label, time: POST_ROTATIONS[0].time, isPost: true }
+          : null
       })()
     : null
 
@@ -406,22 +454,50 @@ export default function TeamsView() {
                   <span className="text-white/50 text-[9px] font-bold uppercase leading-none tracking-wider">Rnd</span>
                   <span className="text-white text-2xl font-black leading-none">{currentRound}</span>
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-white font-black text-lg leading-tight">Round {currentRound}</p>
                   <p className="text-red-200/70 text-xs">{ROTATIONS[currentRound - 1]?.time}</p>
                 </div>
+                {secsLeft != null && (
+                  <div className="shrink-0 text-right">
+                    <p className="text-white/40 text-[9px] font-bold uppercase tracking-wider leading-none mb-0.5">Ends in</p>
+                    <p className="text-white font-black text-base font-mono leading-none">{fmtTimer(secsLeft)}</p>
+                  </div>
+                )}
               </div>
               {currentGame ? (
-                <div className="rounded-xl px-4 py-3 space-y-1" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <p className="text-white/50 text-xs font-semibold uppercase tracking-wider">Now Playing</p>
-                  <p className="text-white text-xl font-black">{currentGame.sport?.name}</p>
-                  <div className="flex items-center gap-3 text-sm flex-wrap">
-                    <span style={{ color: 'rgba(255,200,200,0.8)' }}>vs <span className="font-semibold text-white">{teamName(currentGame.opponent)}</span></span>
-                    <span style={{ color: 'rgba(255,150,150,0.5)' }}>·</span>
-                    <span style={{ color: 'rgba(255,200,200,0.8)' }}>Station <span className="font-semibold text-white">{currentGame.sport?.id}</span></span>
+                <>
+                  <div className="rounded-xl px-4 py-3 space-y-1" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <p className="text-white/50 text-xs font-semibold uppercase tracking-wider">Now Playing</p>
+                    <p className="text-white text-xl font-black">{currentGame.sport?.name}</p>
+                    <div className="flex items-center gap-3 text-sm flex-wrap">
+                      <span style={{ color: 'rgba(255,200,200,0.8)' }}>vs <span className="font-semibold text-white">{teamName(currentGame.opponent)}</span></span>
+                      <span style={{ color: 'rgba(255,150,150,0.5)' }}>·</span>
+                      <span style={{ color: 'rgba(255,200,200,0.8)' }}>Station <span className="font-semibold text-white">{currentGame.sport?.id}</span></span>
+                    </div>
+                    <p className="text-xs" style={{ color: 'rgba(255,180,180,0.6)' }}>Ref: {currentGame.sport?.ref}</p>
                   </div>
-                  <p className="text-xs" style={{ color: 'rgba(255,180,180,0.6)' }}>Ref: {currentGame.sport?.ref}</p>
-                </div>
+                  {nextGame && (
+                    <div className="rounded-xl px-4 py-2.5 mt-2 flex items-start gap-3" style={{ background: 'rgba(0,0,0,0.12)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white/35 text-[9px] font-bold uppercase tracking-wider mb-0.5">Up Next · Rnd {nextGame.isPost ? '—' : nextGame.round}</p>
+                        {nextGame.isPost ? (
+                          <p className="text-white/80 font-bold text-sm">{nextGame.label}</p>
+                        ) : (
+                          <>
+                            <p className="text-white/80 font-bold text-sm">{nextGame.sport?.name}</p>
+                            <div className="flex items-center gap-2 text-xs mt-0.5 flex-wrap">
+                              <span style={{ color: 'rgba(255,200,200,0.6)' }}>vs <span className="text-white/70">{teamName(nextGame.opponent)}</span></span>
+                              <span style={{ color: 'rgba(255,150,150,0.3)' }}>·</span>
+                              <span style={{ color: 'rgba(255,200,200,0.6)' }}>Station <span className="text-white/70">{nextGame.sport?.id}</span></span>
+                            </div>
+                          </>
+                        )}
+                        <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,180,180,0.35)' }}>{nextGame.time}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.07)' }}>
                   <p className="text-sm" style={{ color: 'rgba(255,200,200,0.7)' }}>Choose your team above to see your current game</p>
