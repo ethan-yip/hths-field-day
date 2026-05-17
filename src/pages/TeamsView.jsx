@@ -149,22 +149,27 @@ export default function TeamsView() {
   }, [debugOpen])
 
   useEffect(() => {
-    function computeTimer() {
-      const round = getCurrentRound(debugMins !== null ? debugMins : getEasternMins())
-      if (!round) { setSecsLeft(null); return null }
-      const endMins = round < ROTATION_STARTS.length
+    function endMinsFor(nowM) {
+      const round = getCurrentRound(nowM)
+      if (!round) return null
+      return round < ROTATION_STARTS.length
         ? ROTATION_STARTS[round][0] * 60 + ROTATION_STARTS[round][1]
         : ROTATION_STARTS[round - 1][0] * 60 + ROTATION_STARTS[round - 1][1] + 28
-      return { endMins }
     }
     if (debugMins !== null) {
-      const r = computeTimer()
-      if (r) setSecsLeft(Math.max(0, (r.endMins - debugMins) * 60))
-      return
+      const end = endMinsFor(debugMins)
+      if (!end) { setSecsLeft(null); return }
+      const base = (end - debugMins) * 60
+      const startedAt = Date.now()
+      function tickDebug() { setSecsLeft(Math.max(0, base - Math.floor((Date.now() - startedAt) / 1000))) }
+      tickDebug()
+      const id = setInterval(tickDebug, 1000)
+      return () => clearInterval(id)
     }
     function tick() {
-      const r = computeTimer()
-      if (r) setSecsLeft(Math.max(0, r.endMins * 60 - getEasternSecs()))
+      const end = endMinsFor(getEasternMins())
+      if (!end) { setSecsLeft(null); return }
+      setSecsLeft(Math.max(0, end * 60 - getEasternSecs()))
     }
     tick()
     const id = setInterval(tick, 1000)
