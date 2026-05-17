@@ -122,13 +122,13 @@ function ScoreLogger({ sportId }) {
 
       {/* Status bar */}
       {firestoreError ? (
-        <div className="px-3 py-2 rounded-xl"
+        <div className="px-3 py-2 rounded-xl space-y-0.5"
           style={{ background: 'rgba(185,28,28,0.25)', border: '1px solid rgba(248,113,113,0.4)' }}>
           <p className="text-xs font-bold" style={{ color: '#f87171' }}>
-            Firestore error: {firestoreError}
+            Firestore error: <span className="font-mono">{firestoreError}</span>
           </p>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,180,180,0.6)' }}>
-            Scores saved locally. Check database rules in Firebase console.
+          <p className="text-xs font-mono" style={{ color: 'rgba(255,180,180,0.5)' }}>
+            project: {import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'undefined'}
           </p>
         </div>
       ) : (
@@ -152,11 +152,9 @@ function ScoreLogger({ sportId }) {
             {errorCount > 0 && (
               <span className="text-xs" style={{ color: '#f87171' }}>{errorCount} error</span>
             )}
-            {lastSnapRef.current && (
-              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                snap {lastSnapRef.current}
-              </span>
-            )}
+            <span className="text-xs font-mono" style={{ color: 'rgba(255,255,255,0.18)' }}>
+              {import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'no-project'}
+            </span>
           </div>
         </div>
       )}
