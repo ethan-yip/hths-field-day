@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { TEAMS, SPORTS, ROTATIONS, teamName } from '../data/fieldDay'
+import { splitPoints } from '../lib/points'
+import { TEAMS, GRADES, SPORTS, ROTATIONS, teamName } from '../data/fieldDay'
 
 function Pulse() {
   return (
@@ -14,76 +15,133 @@ function Pulse() {
   )
 }
 
-function fmt(n) {
-  if (n == null || n === '') return '—'
-  const f = parseFloat(n)
-  return f % 1 === 0 ? String(f) : f.toFixed(1)
+const RANK_STYLE = [
+  { bg: 'rgba(251,191,36,0.2)',  color: '#fbbf24', bar: 'linear-gradient(90deg,#f59e0b,#fbbf24)' },
+  { bg: 'rgba(148,163,184,0.2)', color: '#94a3b8', bar: 'linear-gradient(90deg,#64748b,#94a3b8)' },
+  { bg: 'rgba(180,83,9,0.2)',    color: '#b45309', bar: 'linear-gradient(90deg,#92400e,#b45309)' },
+]
+
+function RoundDetail({ teamId, scoreDocs }) {
+  const rounds = ROTATIONS.map(r => {
+    const sportId = Object.keys(r.matchups).find(sid => r.matchups[sid].includes(teamId))
+    if (!sportId) return null
+    const [t1, t2] = r.matchups[sportId]
+    const isT1 = t1 === teamId
+    const d = scoreDocs[`${sportId}_${r.round}`]
+    const split = d ? splitPoints(d.wins1, d.wins2) : null
+    const myPts  = split ? (isT1 ? split[0] : split[1]) : null
+    const oppPts = split ? (isT1 ? split[1] : split[0]) : null
+    return {
+      round: r.round, time: r.time,
+      sport: SPORTS.find(s => s.id === Number(sportId)),
+      opponent: isT1 ? t2 : t1,
+      myPts, oppPts,
+    }
+  }).filter(Boolean)
+
+  return (
+    <div style={{ background: 'rgba(0,0,0,0.1)' }}>
+      {rounds.map((r, idx) => (
+        <div key={r.round} className="flex items-center gap-3 px-6 py-2"
+          style={{ borderBottom: idx < rounds.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+          <div className="shrink-0 w-16">
+            <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.3)' }}>Rnd {r.round}</p>
+            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.4)' }}>{r.sport?.name}</p>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              vs {teamName(r.opponent)}
+            </p>
+          </div>
+          {r.myPts != null ? (
+            <div className="shrink-0 text-right">
+              <p className="text-sm font-black leading-none"
+                style={{ color: r.myPts > r.oppPts ? '#4ade80' : r.myPts < r.oppPts ? '#f87171' : 'rgba(255,255,255,0.5)' }}>
+                {r.myPts}
+              </p>
+              <p className="text-[10px] leading-none mt-0.5" style={{ color: 'rgba(255,255,255,0.2)' }}>/ 100</p>
+            </div>
+          ) : (
+            <span className="text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }}>{r.time}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
-function TeamRow({ team, rank, scoreDocs, maxPoints }) {
+function TeamRow({ team, totalPts, rank, scoreDocs }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 px-4 py-2.5 active:bg-white/5 text-left"
+      >
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>
+          {rank + 1}
+        </div>
+        <p className="flex-1 text-sm font-semibold truncate" style={{ color: 'rgba(255,255,255,0.85)' }}>
+          {team.name}
+        </p>
+        <span className="text-sm font-black shrink-0" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {totalPts} pts
+        </span>
+        <span className="text-xs ml-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open && (
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <RoundDetail teamId={team.id} scoreDocs={scoreDocs} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GradeRow({ grade, rank, teamPoints, maxTotal, scoreDocs }) {
   const [open, setOpen] = useState(false)
 
-  const rounds = useMemo(() => ROTATIONS.map(r => {
-    const sportId = Object.keys(r.matchups).find(sid => r.matchups[sid].includes(team.id))
-    if (!sportId) return null
-    const sport = SPORTS.find(s => s.id === Number(sportId))
-    const [t1, t2] = r.matchups[sportId]
-    const isT1 = t1 === team.id
-    const opponent = isT1 ? t2 : t1
-    const doc = scoreDocs[`${sportId}_${r.round}`]
-    const myWins  = doc ? (isT1 ? doc.wins1 : doc.wins2) : null
-    const oppWins = doc ? (isT1 ? doc.wins2 : doc.wins1) : null
-    const hasScore = doc && myWins != null && myWins !== ''
-    const won = hasScore && parseFloat(myWins) > parseFloat(oppWins)
-    const lost = hasScore && parseFloat(myWins) < parseFloat(oppWins)
-    return { round: r.round, time: r.time, sport, opponent, myWins, oppWins, hasScore, won, lost }
-  }).filter(Boolean), [scoreDocs, team.id])
+  const total = grade.teams.reduce((s, id) => s + (teamPoints[id] || 0), 0)
+  const teams = grade.teams
+    .map(id => ({ ...TEAMS.find(t => t.id === id), points: teamPoints[id] || 0 }))
+    .sort((a, b) => b.points - a.points)
 
-  const totalWins = rounds.reduce((s, r) => s + (r.hasScore ? (parseFloat(r.myWins) || 0) : 0), 0)
-  const scored = rounds.filter(r => r.hasScore).length
-  const pct = maxPoints > 0 ? (totalWins / maxPoints) * 100 : 0
-  const isTop3 = rank < 3
+  const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0
+  const rc = RANK_STYLE[rank] ?? null
 
   return (
     <div className="glass rounded-2xl overflow-hidden">
-      {/* Team header row */}
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/5"
       >
-        {/* Rank badge */}
         <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-black"
-          style={isTop3
-            ? { background: rank === 0 ? 'rgba(251,191,36,0.2)' : rank === 1 ? 'rgba(148,163,184,0.2)' : 'rgba(180,83,9,0.2)',
-                color: rank === 0 ? '#fbbf24' : rank === 1 ? '#94a3b8' : '#b45309' }
-            : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)' }
-          }>
+          style={rc
+            ? { background: rc.bg, color: rc.color }
+            : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.3)' }}>
           {rank + 1}
         </div>
 
-        {/* Name + bar */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-bold truncate"
+            <p className="text-sm font-bold"
               style={{ color: rank === 0 ? '#fbbf24' : 'rgba(255,255,255,0.9)' }}>
-              {team.name}
+              {grade.label}
             </p>
             <span className="text-sm font-black ml-2 shrink-0"
               style={{ color: rank === 0 ? '#fbbf24' : 'rgba(255,255,255,0.7)' }}>
-              {fmt(totalWins)} pts
+              {total} pts
             </span>
           </div>
           <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
             <div className="h-full rounded-full transition-all duration-700"
-              style={{
-                width: `${pct}%`,
-                background: rank === 0
-                  ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
-                  : 'linear-gradient(90deg, #9b1c1c, #ef4444)',
-              }} />
+              style={{ width: `${pct}%`, background: rc?.bar ?? 'linear-gradient(90deg,#9b1c1c,#ef4444)' }} />
           </div>
           <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            {scored}/{rounds.length} rounds scored
+            {grade.teams.length} teams
           </p>
         </div>
 
@@ -92,41 +150,17 @@ function TeamRow({ team, rank, scoreDocs, maxPoints }) {
         </span>
       </button>
 
-      {/* Expanded round-by-round */}
       {open && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          {rounds.map((r, idx) => (
-            <div key={r.round} className="flex items-center gap-3 px-4 py-2.5"
-              style={{ borderBottom: idx < rounds.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
-              {/* Round + sport */}
-              <div className="shrink-0 w-20">
-                <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.35)' }}>Rnd {r.round}</p>
-                <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>{r.sport.name}</p>
-              </div>
-              {/* Opponent */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  vs {teamName(r.opponent)}
-                </p>
-              </div>
-              {/* Score */}
-              {r.hasScore ? (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-sm font-black"
-                    style={{ color: r.won ? '#4ade80' : r.lost ? '#f87171' : 'rgba(255,255,255,0.5)' }}>
-                    {fmt(r.myWins)}
-                  </span>
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>–</span>
-                  <span className="text-sm font-black"
-                    style={{ color: r.lost ? '#4ade80' : r.won ? '#f87171' : 'rgba(255,255,255,0.5)' }}>
-                    {fmt(r.oppWins)}
-                  </span>
-                </div>
-              ) : (
-                <span className="text-xs shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                  {r.time}
-                </span>
-              )}
+          {teams.map((team, idx) => (
+            <div key={team.id}
+              style={{ borderBottom: idx < teams.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+              <TeamRow
+                team={team}
+                totalPts={team.points}
+                rank={idx}
+                scoreDocs={scoreDocs}
+              />
             </div>
           ))}
         </div>
@@ -138,7 +172,6 @@ function TeamRow({ team, rank, scoreDocs, maxPoints }) {
 export default function LiveView() {
   const [scoreDocs, setScoreDocs] = useState({})
   const [loading, setLoading] = useState(true)
-  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -157,21 +190,25 @@ export default function LiveView() {
     return unsub
   }, [])
 
-  const ranked = useMemo(() => {
-    const totals = Object.fromEntries(TEAMS.map(t => [t.id, 0]))
+  const { teamPoints, gradeRanked } = useMemo(() => {
+    const teamPoints = Object.fromEntries(TEAMS.map(t => [t.id, 0]))
+
     Object.values(scoreDocs).forEach(d => {
-      if (d.team1 && d.wins1 != null && d.wins1 !== '')
-        totals[d.team1] += parseFloat(d.wins1) || 0
-      if (d.team2 && d.wins2 != null && d.wins2 !== '')
-        totals[d.team2] += parseFloat(d.wins2) || 0
+      if (!d.team1 || !d.team2) return
+      const split = splitPoints(d.wins1, d.wins2)
+      if (!split) return
+      if (teamPoints[d.team1] !== undefined) teamPoints[d.team1] += split[0]
+      if (teamPoints[d.team2] !== undefined) teamPoints[d.team2] += split[1]
     })
-    return TEAMS
-      .map(t => ({ ...t, points: totals[t.id] }))
-      .sort((a, b) => b.points - a.points)
+
+    const gradeRanked = GRADES
+      .map(g => ({ ...g, total: g.teams.reduce((s, id) => s + (teamPoints[id] || 0), 0) }))
+      .sort((a, b) => b.total - a.total)
+
+    return { teamPoints, gradeRanked }
   }, [scoreDocs])
 
-  const maxPoints = ranked[0]?.points || 1
-  const visible = showAll ? ranked : ranked.slice(0, 5)
+  const maxTotal = gradeRanked[0]?.total || 1
 
   return (
     <div className="min-h-dvh" style={{
@@ -181,7 +218,6 @@ export default function LiveView() {
         'linear-gradient(160deg, #1a0303 0%, #2d0808 45%, #1f0404 100%)',
     }}>
 
-      {/* Header */}
       <header className="glass-strong px-4 py-4 sticky top-0 z-20"
         style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
         <div className="max-w-lg mx-auto flex items-center justify-between">
@@ -212,31 +248,25 @@ export default function LiveView() {
             <div className="w-6 h-6 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
           </div>
         ) : (
-          <>
-            {/* Leaderboard — top 5 with expand */}
-            <section>
-              <h2 className="text-xs font-bold uppercase tracking-widest mb-3"
-                style={{ color: 'rgba(255,255,255,0.4)' }}>Leaderboard</h2>
-              <div className="space-y-2">
-                {visible.map((team, i) => (
-                  <TeamRow
-                    key={team.id}
-                    team={team}
-                    rank={i}
-                    scoreDocs={scoreDocs}
-                    maxPoints={maxPoints}
-                  />
-                ))}
-              </div>
-              <button
-                onClick={() => setShowAll(o => !o)}
-                className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold active:bg-white/5 transition-all"
-                style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                {showAll ? `Show top 5 ▲` : `Show all ${ranked.length} teams ▼`}
-              </button>
-            </section>
-          </>
+          <section>
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-1"
+              style={{ color: 'rgba(255,255,255,0.4)' }}>Leaderboard — by Grade</h2>
+            <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              Each matchup worth 100 pts, split by score. Tap grade to see teams, tap team to see rounds.
+            </p>
+            <div className="space-y-2">
+              {gradeRanked.map((grade, i) => (
+                <GradeRow
+                  key={grade.id}
+                  grade={grade}
+                  rank={i}
+                  teamPoints={teamPoints}
+                  maxTotal={maxTotal}
+                  scoreDocs={scoreDocs}
+                />
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

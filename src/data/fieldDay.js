@@ -112,6 +112,13 @@ export const ROTATIONS = [
   },
 ]
 
+export const GRADES = [
+  { id: 'frosh',  label: 'Freshman',  teams: ['F1','F2','F3','F4'] },
+  { id: 'soph',   label: 'Sophomore', teams: ['Sp1','Sp2','Sp3','Sp4'] },
+  { id: 'junior', label: 'Junior',    teams: ['J1','J2','J3','J4'] },
+  { id: 'senior', label: 'Senior',    teams: ['Sr1','Sr2','Sr3','Sr4'] },
+]
+
 export const POST_ROTATIONS = [
   { label: 'Lunch',              time: '12:00 – 12:45 PM' },
   { label: 'Council Elections',  time: '12:45 – 1:30 PM' },

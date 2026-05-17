@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { doc, setDoc, onSnapshot, collection, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { saveScoreLocal, loadAllScoresLocal, saveSnapshot } from '../lib/scoreStorage'
+import { splitPoints } from '../lib/points'
 import FieldMap from '../components/FieldMap'
 import { SPORTS, ROTATIONS, REF_PASSWORD, teamName } from '../data/fieldDay'
 
@@ -164,7 +165,7 @@ function ScoreLogger({ sportId }) {
         const [t1, t2] = r.matchups[sportId] ?? []
         const s = scores[r.round]
         const hasScore = s.wins1 !== '' && s.wins2 !== ''
-        const total = hasScore ? (parseFloat(s.wins1) || 0) + (parseFloat(s.wins2) || 0) : null
+        const split = hasScore ? splitPoints(s.wins1, s.wins2) : null
         const isOpen  = open === r.round
         const status  = cloudStatus[r.round]
 
@@ -194,10 +195,10 @@ function ScoreLogger({ sportId }) {
                 {status === 'saving' && (
                   <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Saving…</span>
                 )}
-                {status === 'synced' && hasScore && (
-                  <div>
+                {status === 'synced' && hasScore && split && (
+                  <div className="text-right">
                     <p className="text-xs font-bold" style={{ color: '#4ade80' }}>{s.wins1} – {s.wins2}</p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>total {total}</p>
+                    <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>{split[0]} – {split[1]} pts</p>
                   </div>
                 )}
                 {status === 'queued' && (
@@ -206,10 +207,10 @@ function ScoreLogger({ sportId }) {
                 {status === 'error' && (
                   <span className="text-xs font-medium" style={{ color: '#f87171' }}>Retry…</span>
                 )}
-                {!status && hasScore && (
-                  <div>
+                {!status && hasScore && split && (
+                  <div className="text-right">
                     <p className="text-xs font-bold" style={{ color: '#4ade80' }}>{s.wins1} – {s.wins2}</p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>total {total}</p>
+                    <p className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>{split[0]} – {split[1]} pts</p>
                   </div>
                 )}
                 {!status && !hasScore && (
@@ -255,10 +256,17 @@ function ScoreLogger({ sportId }) {
                     />
                   </div>
                 </div>
-                {hasScore && (
-                  <p className="text-xs text-center font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    Total: {total}
-                  </p>
+                {split && (
+                  <div className="flex items-center justify-center gap-3 py-1 px-3 rounded-xl"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <span className="text-sm font-black" style={{ color: split[0] > split[1] ? '#4ade80' : split[0] < split[1] ? '#f87171' : 'rgba(255,255,255,0.5)' }}>
+                      {split[0]} pts
+                    </span>
+                    <span className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>out of 100</span>
+                    <span className="text-sm font-black" style={{ color: split[1] > split[0] ? '#4ade80' : split[1] < split[0] ? '#f87171' : 'rgba(255,255,255,0.5)' }}>
+                      {split[1]} pts
+                    </span>
+                  </div>
                 )}
                 <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
                   Saved locally on every change · synced to cloud when online
