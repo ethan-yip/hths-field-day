@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { initializeFirestore, persistentLocalCache } from 'firebase/firestore'
+import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,8 +11,4 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-
-// Offline persistence: writes are queued in IndexedDB and auto-synced on reconnect
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache(),
-})
+export const db = getFirestore(app)
