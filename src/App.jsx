@@ -9,9 +9,15 @@ const TABS = [
   { id: 'refs',  label: 'Refs'  },
 ]
 
+const REF_AUTH_KEY = 'fd_ref_authed'
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState('teams')
-  const [rulesOpen, setRulesOpen] = useState(false)
+  const [activeTab,  setActiveTab]  = useState('teams')
+  const [rulesOpen,  setRulesOpen]  = useState(false)
+  const [refAuthed,  setRefAuthed]  = useState(() => localStorage.getItem(REF_AUTH_KEY) === '1')
+
+  function loginRef()  { localStorage.setItem(REF_AUTH_KEY, '1'); setRefAuthed(true) }
+  function logoutRef() { localStorage.removeItem(REF_AUTH_KEY); setRefAuthed(false) }
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -19,11 +25,26 @@ export default function App() {
       <header className="glass-strong px-4 py-4 sticky top-0 z-20"
         style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
         <div className="relative flex items-center justify-center max-w-lg mx-auto">
+
+          {/* Left — logout when ref is signed in */}
+          <div className="absolute left-0">
+            {refAuthed && (
+              <button
+                onClick={logoutRef}
+                className="h-8 px-3 rounded-full flex items-center justify-center transition-all active:scale-90 text-xs font-bold"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.13)', color: 'rgba(255,255,255,0.6)' }}
+              >
+                Log out
+              </button>
+            )}
+          </div>
+
           <div className="flex flex-col items-center">
             <p className="text-xs font-bold uppercase tracking-[0.2em] mb-0.5"
               style={{ color: 'rgba(255,255,255,0.45)' }}>HTHS</p>
             <h1 className="text-white text-xl font-black tracking-tight">Field Day 2026</h1>
           </div>
+
           <div className="absolute right-0 flex items-center gap-2">
             <Link
               to="/live"
@@ -47,7 +68,7 @@ export default function App() {
       {/* Content */}
       <main className="flex-1 overflow-y-auto pb-28">
         {activeTab === 'teams' && <TeamsView />}
-        {activeTab === 'refs'  && <RefView onOpenRules={() => setRulesOpen(true)} />}
+        {activeTab === 'refs'  && <RefView onOpenRules={() => setRulesOpen(true)} refAuthed={refAuthed} onLogin={loginRef} />}
       </main>
 
       {/* Bottom Nav */}

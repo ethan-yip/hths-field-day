@@ -273,19 +273,18 @@ function ScoreLogger({ sportId }) {
 }
 
 // ─── RefView ──────────────────────────────────────────────────────────────────
-export default function RefView({ onOpenRules }) {
-  const [authed, setAuthed] = useState(false)
-  const [pw, setPw] = useState('')
+export default function RefView({ onOpenRules, refAuthed, onLogin }) {
+  const [pw,    setPw]    = useState('')
   const [error, setError] = useState(false)
   const [selectedSport, setSelectedSport] = useState('')
 
   function login(e) {
     e.preventDefault()
-    if (pw === REF_PASSWORD) { setAuthed(true); setError(false) }
+    if (pw === REF_PASSWORD) { onLogin(); setError(false) }
     else { setError(true); setPw('') }
   }
 
-  if (!authed) {
+  if (!refAuthed) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] p-6">
         <div className="w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-5"
