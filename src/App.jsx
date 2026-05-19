@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import TeamsView from './pages/TeamsView'
 import RefView from './pages/RefView'
 import RulesModal from './components/RulesModal'
+import { REF_PASSWORD } from './data/fieldDay'
 
 const TABS = [
   { id: 'teams', label: 'Teams' },
@@ -14,9 +15,9 @@ const REF_AUTH_KEY = 'fd_ref_authed'
 export default function App() {
   const [activeTab,  setActiveTab]  = useState('teams')
   const [rulesOpen,  setRulesOpen]  = useState(false)
-  const [refAuthed,  setRefAuthed]  = useState(() => localStorage.getItem(REF_AUTH_KEY) === '1')
+  const [refAuthed,  setRefAuthed]  = useState(() => localStorage.getItem(REF_AUTH_KEY) === REF_PASSWORD)
 
-  function loginRef()  { localStorage.setItem(REF_AUTH_KEY, '1'); setRefAuthed(true) }
+  function loginRef()  { localStorage.setItem(REF_AUTH_KEY, REF_PASSWORD); setRefAuthed(true) }
   function logoutRef() { localStorage.removeItem(REF_AUTH_KEY); setRefAuthed(false) }
 
   return (
