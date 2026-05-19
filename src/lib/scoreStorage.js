@@ -1,6 +1,17 @@
 // Layer 2: localStorage backup — instant, works fully offline, survives page reload.
 // Layer 3: Rolling snapshots — full score dump every N entries, keeps last 5.
 
+const DEVICE_ID_KEY = 'fd_device_id'
+
+export function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(DEVICE_ID_KEY, id)
+  }
+  return id
+}
+
 const scoreKey  = (sportId, round) => `fd_score_${sportId}_${round}`
 const SNAP_IDX  = 'fd_snap_index'
 const snapKey   = (ts) => `fd_snap_${ts}`

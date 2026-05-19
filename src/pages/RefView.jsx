@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { doc, setDoc, onSnapshot, collection, query, where } from 'firebase/firestore'
+import { doc, setDoc, addDoc, onSnapshot, collection, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { saveScoreLocal, loadAllScoresLocal, saveSnapshot } from '../lib/scoreStorage'
+import { saveScoreLocal, loadAllScoresLocal, saveSnapshot, getDeviceId } from '../lib/scoreStorage'
 import { splitPoints } from '../lib/points'
 import FieldMap from '../components/FieldMap'
 import { SPORTS, ROTATIONS, REF_PASSWORD, teamName } from '../data/fieldDay'
@@ -101,16 +101,23 @@ function ScoreLogger({ sportId }) {
     const rotation = ROTATIONS.find(r => r.round === round)
     const [t1, t2] = rotation?.matchups[sportId] ?? []
     const total = w1 + w2
+    const deviceId = getDeviceId()
+    const now = new Date().toISOString()
     setDoc(
       doc(db, 'scores', `${sportId}_${round}`),
       { sportId, round, team1: t1 ?? null, team2: t2 ?? null,
         wins1: s.wins1, wins2: s.wins2, total,
-        updatedAt: new Date().toISOString() },
+        updatedAt: now, lastDeviceId: deviceId },
       { merge: true }
     ).catch(err => {
       setCloudStatus(prev => ({ ...prev, [round]: online ? 'error' : 'queued' }))
       setFirestoreError(err.code)
     })
+    addDoc(collection(db, 'scoreHistory'), {
+      sportId, round, team1: t1 ?? null, team2: t2 ?? null,
+      wins1: s.wins1, wins2: s.wins2, total,
+      deviceId, submittedAt: now,
+    }).catch(() => {})
   }
 
   // ── Status bar ────────────────────────────────────────────────────────────
