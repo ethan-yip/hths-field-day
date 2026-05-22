@@ -78,3 +78,26 @@ export function getSnapshots() {
 function getSnapIndex() {
   try { return JSON.parse(localStorage.getItem(SNAP_IDX)) || [] } catch { return [] }
 }
+
+const GEN_KEY = 'fd_generation'
+
+export function getStoredGeneration() {
+  return localStorage.getItem(GEN_KEY) ?? null
+}
+
+export function clearLocalScores(sportIds, rounds) {
+  for (const sportId of sportIds) {
+    for (const round of rounds) {
+      try { localStorage.removeItem(scoreKey(sportId, round)) } catch {}
+    }
+  }
+  try {
+    const idx = getSnapIndex()
+    idx.forEach(ts => { try { localStorage.removeItem(snapKey(ts)) } catch {} })
+    localStorage.removeItem(SNAP_IDX)
+  } catch {}
+}
+
+export function setStoredGeneration(gen) {
+  localStorage.setItem(GEN_KEY, String(gen))
+}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { doc, setDoc, addDoc, onSnapshot, collection, query, where } from 'firebase/firestore'
+import { doc, setDoc, addDoc, onSnapshot, collection, query, where, getDoc } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { saveScoreLocal, loadAllScoresLocal, saveSnapshot, getDeviceId } from '../lib/scoreStorage'
+import { saveScoreLocal, loadAllScoresLocal, saveSnapshot, getDeviceId, getStoredGeneration, setStoredGeneration, clearLocalScores } from '../lib/scoreStorage'
 import { splitPoints } from '../lib/points'
 import FieldMap from '../components/FieldMap'
 import { SPORTS, ROTATIONS, REF_PASSWORD, teamName } from '../data/fieldDay'
@@ -36,6 +36,19 @@ function ScoreLogger({ sportId }) {
   const saveCountRef = useRef(0)
   const online = useOnline()
   const lastSnapRef = useRef(null)
+
+  // ── Generation check: wipe local cache if DB was reset ───────────────────
+  useEffect(() => {
+    getDoc(doc(db, 'meta', 'config')).then(snap => {
+      if (!snap.exists()) return
+      const serverGen = String(snap.data().generation ?? 1)
+      if (getStoredGeneration() !== serverGen) {
+        clearLocalScores(SPORTS.map(s => s.id), roundNums)
+        setStoredGeneration(serverGen)
+        setScores(loadAllScoresLocal(sportId, roundNums))
+      }
+    }).catch(() => {})
+  }, [sportId])
 
   // ── Subscribe to Firestore; merge with local on arrival ──────────────────
   useEffect(() => {
