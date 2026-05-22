@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, deleteDoc, doc, setDoc, increment } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import FieldMap from '../components/FieldMap'
 import { TEAMS, ROTATIONS, POST_ROTATIONS, ROTATION_STARTS, SPORTS, teamName, ADMIN_PASSWORD } from '../data/fieldDay'
@@ -81,6 +81,9 @@ export default function TeamsView() {
   const [dbConfirm,    setDbConfirm]    = useState(false)
   const [dbClearing,   setDbClearing]   = useState(false)
   const [dbClearDone,  setDbClearDone]  = useState(false)
+  const [resetConfirm, setResetConfirm] = useState(false)
+  const [resetting,    setResetting]    = useState(false)
+  const [resetDone,    setResetDone]    = useState(false)
   const [secsLeft,     setSecsLeft]     = useState(null)
 
   function openAdmin() {
@@ -88,6 +91,7 @@ export default function TeamsView() {
     setAdminPw(''); setAdminPwError(false)
     setClearConfirm(false); setClearDone(false)
     setDbConfirm(false); setDbClearDone(false)
+    setResetConfirm(false); setResetDone(false)
   }
   function closeAdmin() { setAdminOpen(false) }
 
@@ -116,6 +120,14 @@ export default function TeamsView() {
       keys.forEach(k => localStorage.removeItem(k))
       setClearConfirm(false); setClearDone(true)
     } finally { setClearing(false) }
+  }
+
+  async function resetDeviceCaches() {
+    setResetting(true)
+    try {
+      await setDoc(doc(db, 'meta', 'config'), { generation: increment(1) }, { merge: true })
+      setResetConfirm(false); setResetDone(true)
+    } finally { setResetting(false) }
   }
 
   async function clearDatabase() {
@@ -354,6 +366,36 @@ export default function TeamsView() {
                     <p className="text-xs mt-2 font-semibold" style={{ color: '#fbbf24' }}>
                       Active: {String(Math.floor(debugMins / 60)).padStart(2, '0')}:{String(debugMins % 60).padStart(2, '0')}
                     </p>
+                  )}
+                </div>
+
+                {/* Reset Device Caches */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '1.25rem' }}>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,150,150,0.6)' }}>Reset Device Caches</p>
+                  <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>Forces all ref devices to clear their local score cache on next open.</p>
+                  {resetDone && <p className="text-xs font-bold mb-2" style={{ color: '#4ade80' }}>All device caches will clear on next open.</p>}
+                  {!resetConfirm ? (
+                    <button onClick={() => { setResetConfirm(true); setResetDone(false) }}
+                      className="w-full py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-transform"
+                      style={{ background: 'linear-gradient(135deg, #1e3a5f, #1d4ed8)', boxShadow: '0 4px 12px rgba(29,78,216,0.3)' }}>
+                      Reset All Device Caches…
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-center font-semibold" style={{ color: '#93c5fd' }}>This will wipe local scores on all devices. Confirm?</p>
+                      <div className="flex gap-2">
+                        <button onClick={resetDeviceCaches} disabled={resetting}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg, #1e3a5f, #1d4ed8)' }}>
+                          {resetting ? 'Resetting…' : 'Yes, Reset'}
+                        </button>
+                        <button onClick={() => setResetConfirm(false)}
+                          className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95"
+                          style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
